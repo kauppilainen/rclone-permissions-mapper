@@ -89,7 +89,10 @@
 (defn -main []
   (let [input (json/parse-stream *in* true)
         metadata (:Metadata input)
+        _ (debug "Remote: %s\n" (json/generate-string (:Remote input)))
         output {"Metadata" (if metadata
+                             (do
+                               (debug "Metadata: %s\n" (pr-str metadata))
                                (process-metadata (update-keys metadata name)))
                              (do
                                (binding [*out* *err*]
@@ -97,7 +100,7 @@
                                {}))}]
     (json/generate-stream output *out*)
     (when debugging?
-      (debug "\nFINAL:\n%s\n"
-             (with-out-str (json/generate-string output))))))
+      (debug "Output:\n%s\n\n"
+             (pr-str output)))))
 
 (-main)
