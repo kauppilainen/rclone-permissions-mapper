@@ -25,26 +25,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Check the input
-	metadata, ok := in["Metadata"]
-
-	// Map the metadata
-	metadataOut := map[string]string{}
-	var out = map[string]any{
-		"Metadata": metadataOut,
-	}
-
-	if !ok {
-		fmt.Fprintf(os.Stderr, "Metadata key not found. Writing empty output and continuing\n")
-
-		// Write empty output
-		json.NewEncoder(os.Stdout).Encode(&out)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		os.Exit(0)
-	}
 
 	// debug settings
 	debugging := false // set true to debug
@@ -65,6 +45,31 @@ func main() {
 		}
 		fmt.Fprintf(df, format, a...)
 	}
+
+	// Check the input
+	metadata, ok := in["Metadata"]
+
+	// Map the metadata
+	metadataOut := map[string]string{}
+	var out = map[string]any{
+		"Metadata": metadataOut,
+	}
+
+	debug("Input to file", in)
+	debug("Parsed metadata?", ok)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Metadata key not found. Writing empty output and continuing\n")
+
+		// Write empty output
+		json.NewEncoder(os.Stdout).Encode(&out)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		os.Exit(0)
+	}
+
+	debug("Metadata", metadata)
 
 	// loop through the metadata keys
 	for k, v := range metadata.(map[string]any) {
