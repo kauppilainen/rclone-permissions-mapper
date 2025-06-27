@@ -27,15 +27,23 @@ func main() {
 
 	// Check the input
 	metadata, ok := in["Metadata"]
-	if !ok {
-		fmt.Fprintf(os.Stderr, "Metadata key not found\n")
-		os.Exit(1)
-	}
 
 	// Map the metadata
 	metadataOut := map[string]string{}
 	var out = map[string]any{
 		"Metadata": metadataOut,
+	}
+
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Metadata key not found. Writing empty output and continuing\n")
+
+		// Write empty output
+		json.NewEncoder(os.Stdout).Encode(&out)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		os.Exit(0)
 	}
 
 	// debug settings
