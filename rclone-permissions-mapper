@@ -90,7 +90,7 @@
   (let [input (json/parse-stream *in* true)
         metadata (:Metadata input)
         output {"Metadata" (if metadata
-                             (process-metadata metadata)
+                               (process-metadata (update-keys metadata name)))
                              (do
                                (binding [*out* *err*]
                                  (println "Metadata key not found, writing empty output"))
