@@ -16,11 +16,9 @@
   (require '[portal.api :as p]
            '[snitch.core :refer [defn* *fn *let]]
            '[sc.api :as sc])
-
-  (comment
     ;; portal
-    (def p (p/open))
-    (add-tap #'p/submit)))
+  (def p (p/open))
+  (add-tap #'p/submit))
 
 (def debugging? false)
 
@@ -41,9 +39,21 @@
 (defn get-gid []
   (-> (shell {:out :string} "id -g") :out str/trim parse-int))
 
+(defn linux-user? [osuid osgid]
+  (and
+   (>= osuid 1000)
+   (>= osgid 100)))
+
+(defn mac-user? [uid gid]
+  (and
+   (< 500 uid 1000)
+   (= gid 20)))
+
 (defn process-metadata [metadata]
-  (let [osgid (get-gid)
-        osuid (get-uid)]
+  (let [user-group-id (get-gid)
+        user-id       (get-uid)
+        mac-user?'    (mac-user? user-id user-group-id)
+        linux-user?'  (linux-user? user-id user-group-id)]
     (reduce-kv
      (fn [acc k v]
        (cond
@@ -51,17 +61,23 @@
                              (println "Error:" v))
                            (System/exit 1))
 
-         (= k "uid") (let [uid (parse-int v)]
-                       (debug "uid key: %s, val: %s, osuid: %s\n" k v osuid)
-                       (if (and uid
-                                (or (and (>= uid 1000) (>= osuid 501) (< osuid 1000))
-                                    (and (>= osuid 1000) (>= uid 501) (< uid 1000))))
+         (= k "uid") (let [uid (parse-int v)
+                           mac-file? (when uid (and (>= uid 501) (< uid 1000)))
+                           linux-file? (when uid (>= uid 1000))
+                           file-user-mismatch? (or (and mac-file? linux-user?)
+                                                   (and linux-file? mac-user?'))]
+                       (debug "uid key: %s, val: %s, osuid: %s\n" k v user-id)
+                       (if (and uid file-user-mismatch?)
                          acc ;; skip
                          (assoc acc k v)))
 
-         (= k "gid") (let [gid (parse-int v)]
-                       (debug "gid key: %s, val: %s, osgid: %s\n" k v osgid)
-                       (if (not= gid osgid)
+         (= k "gid") (let [gid (parse-int v)
+                           mac-file? (when gid (= gid 20))
+                           linux-file? (when gid (>= gid 100))
+                           file-user-mismatch? (or (and mac-file? linux-user?')
+                                                   (and linux-file? mac-user?'))]
+                       (debug "gid key: %s, val: %s, osgid: %s\n" k v user-group-id)
+                       (if (and gid file-user-mismatch?)
                          acc ;; skip
                          (assoc acc k v)))
 
