@@ -1,0 +1,87 @@
+#!/usr/bin/env bb
+
+(require '[cheshire.core :as json]
+         '[clojure.java.io :as io]
+         '[clojure.string :as str]
+         '[babashka.process :refer [shell]])
+
+(comment
+  ;; Dev tools
+  (require '[babashka.deps :as deps])
+
+  (deps/add-deps '{:deps {djblue/portal {:mvn/version "0.34.2"}
+                          org.clojars.abhinav/snitch {:mvn/version "0.0.12"}
+                          vvvvalvalval/scope-capture {:mvn/version "0.3.3"}}})
+
+  (require '[portal.api :as p]
+           '[snitch.core :refer [defn* *fn *let]]
+           '[sc.api :as sc])
+
+  (comment
+    ;; portal
+    (def p (p/open))
+    (add-tap #'p/submit)))
+
+(def debugging? false)
+
+(defn debug [& args]
+  (when debugging?
+    (let [file (io/file (System/getProperty "user.home")
+                        "rclone-permissions-mapper-debug.txt")]
+      (spit file (apply format args) :append true))))
+
+(defn parse-int [s]
+  (try
+    (Integer/parseInt s)
+    (catch Exception _ nil)))
+
+(defn get-uid []
+  (-> (shell {:out :string} "id -u") :out str/trim parse-int))
+
+(defn get-gid []
+  (-> (shell {:out :string} "id -g") :out str/trim parse-int))
+
+(defn process-metadata [metadata]
+  (let [osgid (get-gid)
+        osuid (get-uid)]
+    (reduce-kv
+     (fn [acc k v]
+       (cond
+         (= k "error") (do (binding [*out* *err*]
+                             (println "Error:" v))
+                           (System/exit 1))
+
+         (= k "uid") (let [uid (parse-int v)]
+                       (debug "uid key: %s, val: %s, osuid: %s\n" k v osuid)
+                       (if (and uid
+                                (or (and (>= uid 1000) (>= osuid 501) (< osuid 1000))
+                                    (and (>= osuid 1000) (>= uid 501) (< uid 1000))))
+                         acc ;; skip
+                         (assoc acc k v)))
+
+         (= k "gid") (let [gid (parse-int v)]
+                       (debug "gid key: %s, val: %s, osgid: %s\n" k v osgid)
+                       (if (not= gid osgid)
+                         acc ;; skip
+                         (assoc acc k v)))
+
+         :else
+         (assoc acc k v)))
+     {}
+     metadata)))
+
+(defn -main []
+  (let [input (json/parse-stream *in* true)
+        metadata (:Metadata input)
+        output {"Metadata" (if metadata
+                             (process-metadata metadata)
+                             (do
+                               (binding [*out* *err*]
+                                 (println "Metadata key not found, writing empty output"))
+                               {}))}]
+    (json/generate-stream output *out*)
+    (when debugging?
+      (debug "\nFINAL:\n%s\n"
+             (with-out-str (json/generate-string output))))))
+
+(-main)
